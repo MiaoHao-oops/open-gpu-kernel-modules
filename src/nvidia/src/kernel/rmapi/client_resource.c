@@ -69,6 +69,7 @@
 #include "nvdump.h"
 #include "gpu/gsp/kernel_gsp.h"
 #include "power/gpu_boost_mgr.h"
+#include "linux/kernel.h"
 
 #define CONFIG_2X_BUFF_SIZE_MIN                                             (2)
 

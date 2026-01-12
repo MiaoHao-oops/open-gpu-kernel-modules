@@ -21,6 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "g_os_nvoc.h"
 #include "os/os.h"
 
 #include "rmapi/rmapi.h"
@@ -64,6 +65,7 @@ rmclientConstruct_IMPL
     NvBool             bReleaseLock = NV_FALSE;
     API_SECURITY_INFO *pSecInfo = pParams->pSecInfo;
     OBJGPU            *pGpu = NULL;
+    OS_THREAD_HANDLE   threadId;
 
     // RM client objects can only be created/destroyed with the RW API lock.
     LOCK_ASSERT_AND_RETURN(rmapiLockIsWriteOwner());
@@ -103,6 +105,8 @@ rmclientConstruct_IMPL
     else
     {
         pClient->ProcID = osGetCurrentProcess();
+        osGetCurrentThread(&threadId);
+        pClient->SubProcessID = threadId;
         if (pClient->cachedPrivilege <= RS_PRIV_LEVEL_USER_ROOT)
             pClient->pOsPidInfo = osGetPidInfo();
     }
@@ -606,8 +610,11 @@ NV_STATUS rmclientUserClientSecurityCheckByHandle(NvHandle hClient, const API_SE
     {
         return _rmclientUserClientSecurityCheck(pClient, pSecInfo);
     }
-    else
+    else {
+        NV_PRINTF(LEVEL_ERROR, "rmclientUserClientSecurityCheckByHandle failed\n");
         return NV_ERR_INVALID_CLIENT;
+    }
+
 }
 
 /**
@@ -737,6 +744,7 @@ rmclientValidate_IMPL
         {
             if (pClient->pOSInfo != pSecInfo->clientOSInfo)
             {
+                NV_PRINTF(LEVEL_ERROR, "Client OS info mismatch\n");
                 status = NV_ERR_INVALID_CLIENT;
             }
         }

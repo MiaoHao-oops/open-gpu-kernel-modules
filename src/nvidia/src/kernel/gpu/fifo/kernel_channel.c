@@ -21,6 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "utils/nvprintf_level.h"
 #define NVOC_KERNEL_CHANNEL_H_PRIVATE_ACCESS_ALLOWED
 
 #include "kernel/gpu/fifo/kernel_channel.h"
@@ -870,6 +871,8 @@ kchannelConstruct_IMPL
     {
         kfifoGetUserdSizeAlign_HAL(pKernelFifo, (NvU32*)&pKernelChannel->userdLength, NULL);
     }
+    NV_PRINTF(LEVEL_ERROR, "bClientAllocatedUserD: %d\n", pKernelChannel->bClientAllocatedUserD);
+    NV_PRINTF(LEVEL_ERROR, "userdLength: %llx\n", pKernelChannel->userdLength);
 
     // Set GPU accounting
     if (RMCFG_MODULE_GPUACCT &&
@@ -1882,7 +1885,8 @@ NV_STATUS kchannelUpdateNotifierMem_IMPL
         }
         else
         {
-            //
+            //_kchannelAllocOrDescribeInstMem
+
             // If a CPU pointer has been passed by caller ensure that the notifier
             // is in sysmem or in case it in vidmem, BAR access to the same is not
             // blocked (for HCC)
@@ -2468,7 +2472,7 @@ _kchannelDescribeMemDescsFromParams
                         pChannelGpfifoParams->mthdbufMem.size);
     }
 
-    NV_PRINTF(LEVEL_INFO,
+    NV_PRINTF(LEVEL_ERROR,
               "hChannel 0x%x hClient 0x%x, Class ID 0x%x "
               "Instance Block @ 0x%llx (%s %x) "
               "USERD @ 0x%llx "
@@ -2640,6 +2644,9 @@ _kchannelSendChannelAllocRpc
     pRpcParams->hPhysChannelGroup = pChannelGpfifoParams->hPhysChannelGroup;
     pRpcParams->internalFlags     = pChannelGpfifoParams->internalFlags;
 
+    NV_PRINTF(LEVEL_ERROR, "gpFifoOffset: %llx\n", pChannelGpfifoParams->gpFifoOffset);
+    NV_PRINTF(LEVEL_ERROR, "hUserdMemory: %x\n", pChannelGpfifoParams->hUserdMemory[0]);
+    NV_PRINTF(LEVEL_ERROR, "userdOffset: %llx\n", pChannelGpfifoParams->userdOffset[0]);
     portMemCopy((void*)pRpcParams->hUserdMemory,
                 sizeof(NvHandle) * NV2080_MAX_SUBDEVICES,
                 (const void*)pChannelGpfifoParams->hUserdMemory,
@@ -3378,6 +3385,18 @@ kchannelCtrlCmdGpfifoGetWorkSubmitToken_IMPL
         rmStatus = kfifoGenerateWorkSubmitToken_HAL(pGpu, pKernelFifo, pKernelChannel,
                                                     &pTokenParams->workSubmitToken,
                                                     pKernelChannel->pKernelChannelGroupApi->pKernelChannelGroup->bIsCallingContextVgpuPlugin);
+        NV_PRINTF(LEVEL_ERROR, "--------------Channel Group Info-------------\n");
+        NV_PRINTF(LEVEL_ERROR, "threadId: %lld\n", pKernelChannel->pKernelChannelGroupApi->threadId);
+        NV_PRINTF(LEVEL_ERROR, "engineType: %d\n", pKernelChannel->pKernelChannelGroupApi->pKernelChannelGroup->engineType);
+        NV_PRINTF(LEVEL_ERROR, "grpId: %d\n", pKernelChannel->pKernelChannelGroupApi->pKernelChannelGroup->grpID);
+        NV_PRINTF(LEVEL_ERROR, "runlistId: %d\n", pKernelChannel->pKernelChannelGroupApi->pKernelChannelGroup->runlistId);
+        NV_PRINTF(LEVEL_ERROR, "chanCount: %d\n", pKernelChannel->pKernelChannelGroupApi->pKernelChannelGroup->chanCount);
+        NV_PRINTF(LEVEL_ERROR, "---------------------------------------------\n");
+        NV_PRINTF(LEVEL_ERROR, "\t--------------Channel Info-------------\n");
+        NV_PRINTF(LEVEL_ERROR, "\tChID: %d\n", pKernelChannel->ChID);
+        NV_PRINTF(LEVEL_ERROR, "\tworkSubmitToken: %x\n", pTokenParams->workSubmitToken);
+        NV_PRINTF(LEVEL_ERROR, "\t---------------------------------------\n");
+        
         NV_CHECK_OR_RETURN(LEVEL_INFO, rmStatus == NV_OK, rmStatus);
     }
 

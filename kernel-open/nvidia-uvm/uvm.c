@@ -866,6 +866,11 @@ static int uvm_mmap(struct file *filp, struct vm_area_struct *vma)
         ret = -nv_status_to_errno(status);
     }
 
+    printk("========%s========\n", __FUNCTION__);
+    printk("vm_start: %lx\n", vma->vm_start);
+    printk("vm_end: %lx\n", vma->vm_end);
+    printk("========%s========\n", __FUNCTION__);
+
     uvm_va_space_up_write(va_space);
 
 out:
@@ -954,6 +959,7 @@ static NV_STATUS uvm_api_pageable_mem_access(UVM_PAGEABLE_MEM_ACCESS_PARAMS *par
 
 static long uvm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
+    printk("uvm_ioctl cmd:%x\n", cmd);
     switch (cmd)
     {
         case UVM_DEINITIALIZE:

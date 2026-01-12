@@ -33,6 +33,7 @@
 #include "gpu_mgr/gpu_mgr.h"
 #include "vgpu/rpc.h"
 #include "core/locks.h"
+#include "nv.h"
 
 NV_STATUS
 rmrescmnConstruct_IMPL
@@ -258,6 +259,7 @@ rmresControl_Prologue_IMPL
     RS_RES_CONTROL_PARAMS_INTERNAL *pParams
 )
 {
+    // NV_PRINTF(LEVEL_ERROR, "rmresControl_Prologue_IMPL time: %lu\n", nv_rdtsc() >> 1);
     NV_STATUS status = NV_OK;
     OBJGPU *pGpu = gpumgrGetGpu(pResource->rpcGpuInstance);
 

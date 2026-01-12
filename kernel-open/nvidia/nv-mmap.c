@@ -530,6 +530,10 @@ int nvidia_mmap_helper(
         NvU64 access_start = mmap_context->access_start;
         NvU64 access_len = mmap_context->access_size;
 
+        nv_printf(NV_DBG_ERRORS, "mmap_start: %llx\n", mmap_start);
+        nv_printf(NV_DBG_ERRORS, "vma start: %lx\n", vma->vm_start);
+        nv_printf(NV_DBG_ERRORS, "length: %llx\n", mmap_length);
+
         // validate the size
         if (NV_VMA_SIZE(vma) != mmap_length)
         {
@@ -608,6 +612,8 @@ int nvidia_mmap_helper(
         NvU64 page_index;
         NvU64 pages;
         NvU64 mmap_size;
+
+        nv_printf(NV_DBG_ERRORS, "vma start: %x\n", vma->vm_start);
 
         at = (nv_alloc_t *)mmap_context->alloc;
         page_index = mmap_context->page_index;

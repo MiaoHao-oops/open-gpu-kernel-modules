@@ -39,8 +39,10 @@ serverutilGetResourceRef
     *ppResourceRef = NULL;
 
     status = serverGetClientUnderLock(&g_resServ, hClient, &pRsClient);
-    if (status != NV_OK)
+    if (status != NV_OK) {
+        NV_PRINTF(LEVEL_ERROR, "serverGetClientUnderLock status: %d\n", status);
         return NV_ERR_INVALID_CLIENT;
+    }
 
     status = clientGetResourceRef(pRsClient, hObject, &pResourceRef);
     if (status != NV_OK)
@@ -303,8 +305,8 @@ serverutilGetClientHandlesFromPid
         pClient = *ppClient;
         pRsClient = staticCast(pClient, RsClient);
 
-        if ((pClient->ProcID == procID) &&
-            (pClient->SubProcessID == subProcessID))
+        if ((pClient->ProcID == procID) && ((subProcessID == 0) ||
+            (pClient->SubProcessID == subProcessID)))
         {
              if (listAppendValue(pClientList,
                                  &pRsClient->hClient) == NULL)
@@ -352,13 +354,16 @@ serverutilAcquireClient
     // LOCK TEST: we should have the API lock here
     LOCK_ASSERT_AND_RETURN(rmapiLockIsOwner());
 
-    if (NV_OK != serverAcquireClient(&g_resServ, hClient, access, &pRsClient))
+    if (NV_OK != serverAcquireClient(&g_resServ, hClient, access, &pRsClient)) {
+        NV_PRINTF(LEVEL_ERROR, "serverAcquireClient failed\n");
         return NV_ERR_INVALID_CLIENT;
+    }
 
     pClient = dynamicCast(pRsClient, RmClient);
     if (pClient == NULL)
     {
         serverReleaseClient(&g_resServ, access, pRsClient);
+        NV_PRINTF(LEVEL_ERROR, "dynamicCast failed\n");
         return NV_ERR_INVALID_CLIENT;
     }
 

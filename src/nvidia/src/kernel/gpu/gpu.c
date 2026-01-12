@@ -605,6 +605,8 @@ NV_STATUS gpuConstruct_IMPL
         pGpu->peer[i].pinset      = NV5070_CTRL_CMD_GET_PINSET_PEER_PEER_PINSET_NONE;
     }
 
+    // os_dump_stack();
+
     return gpuConstructPhysical(pGpu);
 }
 

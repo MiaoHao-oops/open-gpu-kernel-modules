@@ -28,6 +28,7 @@
 #include "diagnostics/tracer.h"
 #include "core/locks.h"
 #include "core/thread_state.h"
+#include "utils/nvprintf_level.h"
 #include "virtualization/hypervisor/hypervisor.h"
 #include "gpu/device/device.h"
 
@@ -431,6 +432,7 @@ _rmapiRmControl(NvHandle hClient, NvHandle hObject, NvU32 cmd, NvP64 pUserParams
     if (serverutilGetClientUnderLock(hClient) == NULL)
     {
         rmStatus = NV_ERR_INVALID_CLIENT;
+        NV_PRINTF(LEVEL_ERROR, "serverutilGetClientUnderLock return invalid client\n");
         goto done;
     }
 
@@ -442,6 +444,7 @@ _rmapiRmControl(NvHandle hClient, NvHandle hObject, NvU32 cmd, NvP64 pUserParams
         if (pSecInfo->privLevel < RS_PRIV_LEVEL_KERNEL)
         {
             rmStatus = NV_ERR_INVALID_CLIENT;
+            NV_PRINTF(LEVEL_ERROR, "pSecInfo->privLevel < RS_PRIV_LEVEL_KERNEL\n");
             goto done;
         }
     }

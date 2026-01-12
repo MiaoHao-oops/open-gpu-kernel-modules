@@ -1231,8 +1231,9 @@ rmapiAllocWithSecInfo
         (pRmApi->bApiLockInternal || pRmApi->bGpuLockInternal))
         allocInitStates |= RM_ALLOC_STATES_INTERNAL_ALLOC;
 
-    NV_PRINTF(LEVEL_INFO, "client:0x%x parent:0x%x object:0x%x class:0x%x\n",
-              hClient, hParent, *phObject, hClass);
+    // if(hClass == 0xc56f)
+    //     NV_PRINTF(LEVEL_ERROR, "client:0x%x parent:0x%x object:0x%x class:0x%x\n",
+    //           hClient, hParent, *phObject, hClass);
 
     status = _rmAlloc(hClient,
                       hParent,
@@ -1440,8 +1441,8 @@ rmapiFreeWithSecInfo
 
     portMemSet(&freeParams, 0, sizeof(freeParams));
 
-    NV_PRINTF(LEVEL_INFO, "Nv01Free: client:0x%x object:0x%x\n", hClient,
-              hObject);
+    // NV_PRINTF(LEVEL_ERROR, "Nv01Free: client:0x%x object:0x%x\n", hClient,
+    //           hObject);
 
     status = rmapiPrologue(pRmApi, &rmApiContext);
 

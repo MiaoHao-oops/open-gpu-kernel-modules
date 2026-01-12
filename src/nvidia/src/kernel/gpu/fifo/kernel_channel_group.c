@@ -26,6 +26,7 @@
 #include "platform/sli/sli.h"
 
 #include "ctrl/ctrla06c.h"  // NVA06C_CTRL_INTERLEAVE_LEVEL_*
+#include "utils/nvprintf_level.h"
 
 // Static functions
 static void _kchangrpFreeAllEngCtxDescs(OBJGPU *pGpu, KernelChannelGroup *pKernelChannelGroup);
@@ -152,6 +153,10 @@ kchangrpInit_IMPL
         pKernelFifo,
         pKernelChannelGroup->engineType);
 
+    NV_PRINTF(LEVEL_ERROR, "==================Kernel Channel Group Info===============\n");
+    NV_PRINTF(LEVEL_ERROR, "runlistId:%d\n", pKernelChannelGroup->runlistId);
+    NV_PRINTF(LEVEL_ERROR, "engineType:%d\n", pKernelChannelGroup->engineType);
+
     if (kfifoIsPerRunlistChramEnabled(pKernelFifo))
     {
         //
@@ -173,6 +178,10 @@ kchangrpInit_IMPL
 
     pKernelChannelGroup->grpID = grpID;
     pKernelChannelGroup->timesliceUs = kfifoChannelGroupGetDefaultTimeslice_HAL(pKernelFifo);
+    NV_PRINTF(LEVEL_ERROR, "grpId: %d\n", pKernelChannelGroup->grpID);
+    NV_PRINTF(LEVEL_ERROR, "timesliceUs:%lld\n", pKernelChannelGroup->timesliceUs);
+    NV_PRINTF(LEVEL_ERROR, "==================Kernel Channel Group Info===============\n");
+
 
     NV_ASSERT_OK_OR_GOTO(status,
         kfifoChannelGroupSetTimeslice(pGpu, pKernelFifo, pKernelChannelGroup,

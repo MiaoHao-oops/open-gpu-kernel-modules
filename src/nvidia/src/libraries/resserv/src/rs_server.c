@@ -29,6 +29,7 @@
 #include "resserv/rs_resource.h"
 #include "tls/tls.h"
 #include "nv_speculation_barrier.h"
+#include "ctrl/ctrl83de/ctrl83dedebug.h"
 
 /**
  * Get the RsClient from a client handle without taking locks
@@ -1292,6 +1293,11 @@ serverControl
         if (status != NV_OK)
             goto done;
     }
+
+    // if(pParams->cmd == 0x83de0317) {
+    //     NV83DE_CTRL_CMD_DEBUG_SUSPEND_ALL_CONTEXTS_FOR_CLIENT_PARAMS *tp = (NV83DE_CTRL_CMD_DEBUG_SUSPEND_ALL_CONTEXTS_FOR_CLIENT_PARAMS *)(pParams->pParams);
+    //     NV_PRINTF(LEVEL_ERROR, "waitForEvent:0x%x, hResidentChannel:0x%x\n", tp->waitForEvent, tp->hResidentChannel);
+    // }
 
     status = serverTopLock_Prologue(pServer, access, pLockInfo, &releaseFlags);
     if (status != NV_OK)

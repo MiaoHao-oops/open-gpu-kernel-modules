@@ -109,6 +109,7 @@ ceutilsConstruct_IMPL
     NvBool bMIGInUse = IS_MIG_IN_USE(pGpu);
     MemoryManager *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
 
+    os_dump_stack();
     pCeUtils->pGpu = pGpu;
 
     if (FLD_TEST_DRF(0050_CEUTILS, _FLAGS, _FIFO_LITE, _TRUE, allocFlags))

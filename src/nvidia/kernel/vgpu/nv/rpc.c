@@ -28,6 +28,7 @@
 //
 //******************************************************************************
 
+#include <unistd.h>
 #include "os/os.h"
 #include "core/system.h"
 #include "core/locks.h"
@@ -47,6 +48,7 @@
 #include "rmapi/client_resource.h"
 #include "gpu/gsp/kernel_gsp.h"
 #include "gpu/mem_mgr/mem_mgr.h"
+#include "utils/nvprintf_level.h"
 #include "vgpu/vgpu_version.h"
 #include "vgpu/rpc.h"
 #include "vgpu/vgpu_events.h"
@@ -54,6 +56,7 @@
 #include "os/os.h"
 #include "objtmr.h"
 #include "lib/base_utils.h"
+#include "nv.h"
 #if defined(NV_UNIX) && RMCFG_FEATURE_GSP_CLIENT_RM
 #include "os-interface.h"
 #endif
@@ -1679,6 +1682,110 @@ NV_STATUS rpcRecvPoll_IMPL(OBJGPU *pGpu, OBJRPC *pRpc, NvU32 expectedFunc)
     return NV_ERR_NOT_SUPPORTED;
 }
 
+
+static NV_STATUS _myIssueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
+{
+    // NvU64 start = nv_rdtsc();
+    NV_STATUS status = NV_OK;
+    RPC_METER_LIST *pNewEntry = NULL;
+
+    // should not be called in broadcast mode
+    NV_ASSERT_OR_RETURN(!gpumgrGetBcEnabledStatus(pGpu), NV_ERR_INVALID_STATE);
+
+    if (bProfileRPC)
+    {
+        // Create a new entry for our RPC profiler
+        pNewEntry = portMemAllocNonPaged(sizeof(RPC_METER_LIST));
+        if (pNewEntry == NULL)
+        {
+            NV_PRINTF(LEVEL_ERROR, "failed to allocate RPC meter memory!\n");
+            NV_ASSERT(0);
+            return NV_ERR_INSUFFICIENT_RESOURCES;
+        }
+
+        portMemSet(pNewEntry, 0, sizeof(RPC_METER_LIST));
+
+        if (rpcMeterHead.pHead == NULL)
+            rpcMeterHead.pHead = pNewEntry;
+        else
+            rpcMeterHead.pTail->pNext = pNewEntry;
+
+        rpcMeterHead.pTail = pNewEntry;
+
+        pNewEntry->rpcData.rpcDataTag = vgpu_rpc_message_header_v->function;
+
+        rpcProfilerEntryCount++;
+
+        osGetPerformanceCounter(&pNewEntry->rpcData.startTimeInNs);
+    }
+
+    // For HCC, cache expectedFunc value before encrypting.
+    NvU32 expectedFunc = vgpu_rpc_message_header_v->function;
+
+    // NV_PRINTF(LEVEL_ERROR, "rpcSendMessage time: %lu\n", nv_rdtsc() >> 1);
+    status = rpcSendMessage(pGpu, pRpc);
+    if (status != NV_OK)
+    {
+        NV_PRINTF_COND(pRpc->bQuietPrints, LEVEL_INFO, LEVEL_ERROR,
+            "rpcSendMessage failed with status 0x%08x for fn %d!\n",
+            status, vgpu_rpc_message_header_v->function);
+        //
+        // It has been observed that returning NV_ERR_BUSY_RETRY in a bad state (RPC
+        // buffers full and not being serviced) can make things worse, i.e. turn RPC
+        // failures into app hangs such that even nvidia-bug-report.sh gets stuck.
+        // Avoid this for now while still returning the correct error in other cases.
+        //
+        return (status == NV_ERR_BUSY_RETRY) ? NV_ERR_GENERIC : status;
+    }
+
+    // NvU64 mid = nv_rdtsc();
+    // Use cached expectedFunc here because vgpu_rpc_message_header_v is encrypted for HCC.
+    // status = rpcRecvPoll(pGpu, pRpc, expectedFunc);
+    // if (status != NV_OK)
+    // {
+    //     if (status == NV_ERR_TIMEOUT)
+    //     {
+    //         NV_PRINTF_COND(pRpc->bQuietPrints, LEVEL_INFO, LEVEL_ERROR,
+    //             "rpcRecvPoll timedout for fn %d!\n",
+    //              vgpu_rpc_message_header_v->function);
+    //     }
+    //     else
+    //     {
+    //         NV_PRINTF_COND(pRpc->bQuietPrints, LEVEL_INFO, LEVEL_ERROR,
+    //             "rpcRecvPoll failed with status 0x%08x for fn %d!\n",
+    //              status, vgpu_rpc_message_header_v->function);
+    //     }
+    //     return status;
+    // }
+    // NV_PRINTF(LEVEL_ERROR, "rpcRecvPoll finish time: %lu\n", nv_rdtsc() >> 1);
+
+    if (bProfileRPC)
+        osGetPerformanceCounter(&pNewEntry->rpcData.endTimeInNs);
+
+    // Now check if RPC really succeeded
+    // if (vgpu_rpc_message_header_v->rpc_result != NV_VGPU_MSG_RESULT_SUCCESS)
+    // {
+    //     NV_PRINTF(LEVEL_WARNING, "RPC failed with status 0x%08x for fn %d!\n",
+    //               vgpu_rpc_message_header_v->rpc_result,
+    //               vgpu_rpc_message_header_v->function);
+
+    //     if (vgpu_rpc_message_header_v->rpc_result < DRF_BASE(NV_VGPU_MSG_RESULT__VMIOP))
+    //         return vgpu_rpc_message_header_v->rpc_result;
+
+    //     return NV_ERR_GENERIC;
+    // }
+
+    // NvU64 end = nv_rdtsc();
+    // NvU64 sample = nv_rdtsc();
+    // NV_PRINTF(LEVEL_ERROR, "RPC time: %lu\n", (end - start) >> 1);
+    // NV_PRINTF(LEVEL_ERROR, "Poll time: %lu\n", (end - mid) >> 1);
+    // NV_PRINTF(LEVEL_ERROR, "Sample time: %lu\n", (sample - end) >> 1);
+
+    return NV_OK;
+}
+
+
+
 static NV_STATUS _rpcSendMessage_VGPUGSP(OBJGPU *pGpu, OBJRPC *pRpc)
 {
     OBJVGPU *pVGpu = GPU_GET_VGPU(pGpu);
@@ -1695,6 +1802,7 @@ static NV_STATUS _rpcRecvPoll_VGPUGSP(OBJGPU *pGpu, OBJRPC *pRPC, NvU32 expected
 
 static NV_STATUS _issueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
 {
+    // NvU64 start = nv_rdtsc();
     NV_STATUS status = NV_OK;
     RPC_METER_LIST *pNewEntry = NULL;
 
@@ -1732,6 +1840,7 @@ static NV_STATUS _issueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
     // For HCC, cache expectedFunc value before encrypting.
     NvU32 expectedFunc = vgpu_rpc_message_header_v->function;
 
+    // NV_PRINTF(LEVEL_ERROR, "rpcSendMessage time: %lu\n", nv_rdtsc() >> 1);
     status = rpcSendMessage(pGpu, pRpc);
     if (status != NV_OK)
     {
@@ -1747,6 +1856,7 @@ static NV_STATUS _issueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
         return (status == NV_ERR_BUSY_RETRY) ? NV_ERR_GENERIC : status;
     }
 
+    // NvU64 mid = nv_rdtsc();
     // Use cached expectedFunc here because vgpu_rpc_message_header_v is encrypted for HCC.
     status = rpcRecvPoll(pGpu, pRpc, expectedFunc);
     if (status != NV_OK)
@@ -1765,6 +1875,7 @@ static NV_STATUS _issueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
         }
         return status;
     }
+    // NV_PRINTF(LEVEL_ERROR, "rpcRecvPoll finish time: %lu\n", nv_rdtsc() >> 1);
 
     if (bProfileRPC)
         osGetPerformanceCounter(&pNewEntry->rpcData.endTimeInNs);
@@ -1784,6 +1895,11 @@ static NV_STATUS _issueRpcAndWait(OBJGPU *pGpu, OBJRPC *pRpc)
 
         return NV_ERR_GENERIC;
     }
+
+    // NvU64 end = nv_rdtsc();
+    // NvU64 sample = nv_rdtsc();
+    // NV_PRINTF(LEVEL_ERROR, "RPC time: %lu\n", (end - start) >> 1);
+    // NV_PRINTF(LEVEL_ERROR, "Poll time: %lu\n", (end - mid) >> 1);
 
     return NV_OK;
 }
@@ -9227,6 +9343,7 @@ NV_STATUS rpcRmApiControl_GSP
     NvU32 paramsSize
 )
 {
+    // NV_PRINTF(LEVEL_ERROR, "rpcRmApiControl_GSP time: %lu\n", nv_rdtsc());
     NV_STATUS status = NV_ERR_NOT_SUPPORTED;
 
     OBJGPU *pGpu = (OBJGPU*)pRmApi->pPrivateContext;
@@ -9378,6 +9495,9 @@ NV_STATUS rpcRmApiControl_GSP
     }
     else
     {
+        // if(cmd == 0x2080110b)
+        //     status = _issueRpcAsync(pGpu, pRpc);
+        // else
         status = _issueRpcAndWait(pGpu, pRpc);
     }
 

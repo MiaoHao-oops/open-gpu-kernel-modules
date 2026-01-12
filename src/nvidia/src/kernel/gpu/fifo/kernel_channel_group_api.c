@@ -23,6 +23,7 @@
 
 #include "kernel/gpu/fifo/kernel_channel_group_api.h"
 
+#include "g_gpu_nvoc.h"
 #include "kernel/core/locks.h"
 #include "kernel/gpu/fifo/kernel_channel_group.h"
 #include "kernel/gpu/mem_mgr/mem_mgr.h"
@@ -41,6 +42,7 @@
 #include "gpu/device/device.h"
 #include "kernel/gpu/mig_mgr/kernel_mig_manager.h"
 #include "gpu/mem_mgr/vaspace_api.h"
+#include "utils/nvprintf_level.h"
 #include "vgpu/rpc.h"
 #include "rmapi/rs_utils.h"
 
@@ -81,6 +83,8 @@ kchangrpapiConstruct_IMPL
               "hClient: 0x%x, hParent: 0x%x, hObject:0x%x, hClass: 0x%x\n",
               pParams->hClient, pParams->hParent, pParams->hResource,
               pParams->externalClassId);
+
+    pKernelChannelGroupApi->threadId = portThreadGetCurrentThreadId();
 
     if (RS_IS_COPY_CTOR(pParams))
     {
@@ -1175,6 +1179,12 @@ kchangrpapiCtrlCmdGpFifoSchedule_IMPL
         NvHandle hClient = RES_GET_CLIENT_HANDLE(pKernelChannelGroupApi);
         NvHandle hObject = RES_GET_HANDLE(pKernelChannelGroupApi);
 
+        NV_PRINTF(LEVEL_ERROR, "-----------------Gpfifo Scheduling Info--------------\n");
+        NV_PRINTF(LEVEL_ERROR, "pKernelChannelGroup->grpId: %d\n", pKernelChannelGroup->grpID);
+        NV_PRINTF(LEVEL_ERROR, "pRmCtrlParams->cmd: %x\n", pRmCtrlParams->cmd);
+        NV_PRINTF(LEVEL_ERROR, "pRmCtrlParams->paramsSize: %x\n", pRmCtrlParams->paramsSize);
+        NV_PRINTF(LEVEL_ERROR, "-----------------Gpfifo Scheduling Info--------------\n");
+
         NV_RM_RPC_CONTROL(pGpu,
                           hClient,
                           hObject,
@@ -1305,6 +1315,9 @@ kchangrpapiCtrlCmdSetTimeslice_IMPL
         return NV_ERR_INVALID_OBJECT;
     pKernelChannelGroup = pKernelChannelGroupApi->pKernelChannelGroup;
 
+    NV_PRINTF(LEVEL_ERROR, "===========%s==========\n", __FUNCTION__);
+    NV_PRINTF(LEVEL_ERROR, "grpId:%d\n", pKernelChannelGroup->grpID);
+
     if (gpuGetClassByClassId(pGpu, pResourceRef->externalClassId, &pClass) != NV_OK)
     {
         NV_PRINTF(LEVEL_ERROR, "class %x not supported\n",
@@ -1314,6 +1327,7 @@ kchangrpapiCtrlCmdSetTimeslice_IMPL
 
     if (IS_VIRTUAL(pGpu) || IS_GSP_CLIENT(pGpu))
     {
+
         CALL_CONTEXT *pCallContext = resservGetTlsCallContext();
         RmCtrlParams *pRmCtrlParams = pCallContext->pControlParams;
         NvHandle hClient = RES_GET_CLIENT_HANDLE(pKernelChannelGroupApi);
@@ -1329,11 +1343,13 @@ kchangrpapiCtrlCmdSetTimeslice_IMPL
                           status);
 
         // Update guest RM's internal bookkeeping with the timeslice.
+        NV_PRINTF(LEVEL_ERROR, "status: %d\n", status);
         if (status == NV_OK)
         {
             pKernelChannelGroup->timesliceUs = pParams->timesliceUs;
+            NV_PRINTF(LEVEL_ERROR, "timesliceUs: %lld\n", pKernelChannelGroup->timesliceUs);
         }
-
+        NV_PRINTF(LEVEL_ERROR, "===========%s==========\n", __FUNCTION__);
         return status;
     }
 

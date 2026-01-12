@@ -735,6 +735,12 @@ NV_STATUS uvm_api_register_channel(UVM_REGISTER_CHANNEL_PARAMS *params, struct f
         .user_client   = params->hClient,
         .user_object   = params->hChannel
     };
+    printk("=============%s===========\n", __FUNCTION__);
+    printk("hClient: %x\n", params->hClient);
+    printk("hChannel: %x\n", params->hChannel);
+    printk("base: %llx\n", params->base);
+    printk("length: %llx\n", params->length);
+    printk("=============%s===========\n", __FUNCTION__);
     return uvm_register_channel(va_space, &params->gpuUuid, &user_rm_channel, params->base, params->length);
 }
 

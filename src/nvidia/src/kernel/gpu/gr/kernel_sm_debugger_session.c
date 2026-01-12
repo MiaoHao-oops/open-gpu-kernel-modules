@@ -242,6 +242,9 @@ ksmdbgssnConstruct_IMPL
     hClass3dObject = pNv83deAllocParams->hClass3dObject;
     hKernelSMDebuggerSession = pParams->hResource;
 
+    // NV_PRINTF(LEVEL_ERROR, "hAppClient = 0x%x, hClass3dObject = 0x%x, hKernelSMDebuggerSession = 0x%x\n",
+    //           hAppClient, hClass3dObject, hKernelSMDebuggerSession);
+
     // If given a zero hAppClient, assume the client meant to target the calling hClient.
     if (hAppClient == NV01_NULL_OBJECT)
     {

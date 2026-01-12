@@ -46,11 +46,23 @@
 #include <class/cl003e.h> // NV01_MEMORY_SYSTEM
 #include <class/cl0071.h> // NV01_MEMORY_SYSTEM_OS_DESCRIPTOR
 
+#include "containers/list.h"
+#include "g_rs_client_nvoc.h"
+#include "nvoc/prelude.h"
+#include "nvtypes.h"
 #include "rmapi/client_resource.h"
 #include "nvlog/nvlog.h"
+#include "rmapi/rs_utils.h"
+#include "utils/nvprintf_level.h"
 #include <nv-ioctl-lockless-diag.h>
+#include <nv_list.h>
 
 #include <ctrl/ctrl00fd.h>
+#include <ctrl/ctrl83de/ctrl83dedebug.h>
+#include <ctrl/ctrla06f/ctrla06fgpfifo.h>
+#include <class/clc56f.h>
+#include <kernel/gpu/fifo/kernel_channel_group.h>
+#include <kernel/gpu/fifo/kernel_channel_group_api.h>
 
 #include <ctrl/ctrl00e0.h>
 
@@ -71,6 +83,8 @@
         goto done;                             \
     }                                          \
 }
+
+static void* g_clientOSInfo;
 
 static NV_STATUS RmGetDeviceFd(NVOS54_PARAMETERS *pApi, NvS32 *pFd,
                                NvBool *pSkipDeviceRef)
@@ -313,6 +327,10 @@ NV_STATUS RmIoctl(
 
             NV_ACTUAL_DEVICE_ONLY(nv);
 
+            // NV_PRINTF(LEVEL_ERROR, "hObjectNew: %x\n", pParms->hObjectNew);
+            // NV_PRINTF(LEVEL_ERROR, "pMemory: %p\n", pParms->pMemory);
+            // NV_PRINTF(LEVEL_ERROR, "pMemory: %llx\n", pParms->limit);
+
             if (dataSize != sizeof(nv_ioctl_nvos02_parameters_with_fd))
             {
                 rmStatus = NV_ERR_INVALID_ARGUMENT;
@@ -418,6 +436,140 @@ NV_STATUS RmIoctl(
                 Nv04AllocWithAccessSecInfo(pApiAccess, secInfo);
             }
 
+            if((bAccessApi ? pApiAccess->hClass : pApi->hClass) == AMPERE_CHANNEL_GPFIFO_A)
+            {
+                // NV_PRINTF(LEVEL_ERROR, "clientOSInfo:0x%x\n", secInfo.clientOSInfo);
+                // NV_PRINTF(LEVEL_ERROR, "threadId:0x%x\n", portThreadGetCurrentThreadId());
+                g_clientOSInfo = secInfo.clientOSInfo;
+            }
+
+            /*
+            NV_PRINTF(LEVEL_ERROR, "-------------------RM Alloc Info-----------------\n");
+            NV_PRINTF(LEVEL_ERROR, "hRoot: %x\n", pApi->hRoot);
+            NV_PRINTF(LEVEL_ERROR, "hObjectParent: %x\n", pApi->hObjectParent);
+            NV_PRINTF(LEVEL_ERROR, "hClass: %x\n", pApi->hClass);
+            NV_PRINTF(LEVEL_ERROR, "hObjectNew: %x\n", pApi->hObjectNew);
+            NV_PRINTF(LEVEL_ERROR, "-------------------RM Alloc Info-----------------\n");
+            */
+
+            break;
+        }
+
+        case NV_ESC_RM_QUERY_GROUP:
+        {
+            NVOS54_PARAMETERS *pApi = data;
+
+            NV_STATUS status;
+            NvHandle *pClientHandleList;
+            NvU32     clientHandleListSize, numClient, numResource;
+            NvU64     CurrentThreadId;
+            RsClient *pClient;
+            RmClient *pRmClient, **ppClient;
+            RS_ITERATOR it, childIt;
+            NvHandle threadId = pApi->hClient, processId = os_get_current_process(), hClient;
+            ClientHandlesList clientList;
+            ClientHandlesListIter chlit;
+            listInit(&clientList, portMemAllocatorGetGlobalNonPaged());
+
+            NV_PRINTF(LEVEL_ERROR, "Iterate All Clients\n");
+            numClient = 1;
+            for (ppClient = serverutilGetFirstClientUnderLock();
+                ppClient;
+                ppClient = serverutilGetNextClientUnderLock(ppClient))
+            {
+                pRmClient = *ppClient;  
+                pClient = staticCast(pRmClient, RsClient);
+                // Iterate through devices and display channels
+                NV_PRINTF(LEVEL_ERROR, "\t[%d] Client: %x ProcId: %d, SubProcessId: %d\n", 
+                    numClient++, pClient->hClient, pRmClient->ProcID, pRmClient->SubProcessID);
+            }
+
+            NV_PRINTF(LEVEL_ERROR, "Query Client Handles through pid: %d, tid: %d\n", processId, threadId);
+            status = serverutilGetClientHandlesFromPid(processId, 0, &clientList);
+            if (status == NV_OK) {
+                chlit = listIterAll(&clientList);
+                numClient = 1;
+                while (listIterNext(&chlit)) {
+                    hClient = *(NvHandle *)chlit.pValue;
+                    NV_PRINTF(LEVEL_ERROR, "[%d] Client found by PID: %x\n", numClient++, hClient);
+                    status = serverGetClientUnderLock(&g_resServ, hClient, &pClient);
+                    if (status != NV_OK)
+                        continue;
+                    pRmClient = dynamicCast(pClient, RmClient);
+                    NV_PRINTF(LEVEL_ERROR, "RmClient->ProcId: %d\n", pRmClient->ProcID);
+                    NV_PRINTF(LEVEL_ERROR, "RmClient->SubProcessID: %d\n", pRmClient->SubProcessID);
+                    NV_PRINTF(LEVEL_ERROR, "RmClient->SubProcessName: %s\n", pRmClient->SubProcessName);
+                    // it = clientRefIter(pClient, NULL, 0, RS_ITERATE_DESCENDANTS, NV_TRUE);
+                    it = clientRefIter(pClient, NULL, classId(KernelChannelGroupApi), RS_ITERATE_DESCENDANTS, NV_TRUE);
+                    numResource = 1;
+                    while (clientRefIterNext(pClient, &it)) {
+                        // NV_PRINTF(LEVEL_ERROR, "\t[%d]classId: %s\n", numResource++, objGetClassName(it.pResourceRef->pResource));
+
+                        KernelChannelGroupApi *pKernelChannelGroupApi = dynamicCast(it.pResourceRef->pResource, KernelChannelGroupApi);
+                        KernelChannelGroup *pKernelChannelGroup = pKernelChannelGroupApi->pKernelChannelGroup;
+                        NV_PRINTF(LEVEL_ERROR, "\t---------------------------\n");
+                        NV_PRINTF(LEVEL_ERROR, "\tthreadId: %lld\n", pKernelChannelGroupApi->threadId);
+                        NV_PRINTF(LEVEL_ERROR, "\tengineType: %d\n", pKernelChannelGroup->engineType);
+                        NV_PRINTF(LEVEL_ERROR, "\tgrpId: %d\n", pKernelChannelGroup->grpID);
+                        NV_PRINTF(LEVEL_ERROR, "\trunlistId: %d\n", pKernelChannelGroup->runlistId);
+                        NV_PRINTF(LEVEL_ERROR, "\tchanCount: %d\n", pKernelChannelGroup->chanCount);
+                        NV_PRINTF(LEVEL_ERROR, "\t---------------------------\n");
+                    }
+                    NV_PRINTF(LEVEL_ERROR, "\n");
+                }
+            } else {
+                NV_PRINTF(LEVEL_ERROR, "Get Client from PID failed!\n");
+            }
+            listDestroy(&clientList);
+
+            NV_PRINTF(LEVEL_ERROR, "Query clientOSInfo:0x%x\n", secInfo.clientOSInfo);
+            NV_PRINTF(LEVEL_ERROR, "Query threadId:0x%d\n", pApi->hClient);
+            status = rmapiGetClientHandlesFromOSInfo(g_clientOSInfo, &pClientHandleList, &clientHandleListSize);
+            NV_PRINTF(LEVEL_ERROR, "Query Client number: %d\n", clientHandleListSize);
+            for(int i = 0; i < clientHandleListSize; ++i) {
+                NV_PRINTF(LEVEL_ERROR, "client[%d]:0x%x\n", i, pClientHandleList[i]);
+                status = serverGetClientUnderLock(&g_resServ, pClientHandleList[i], &pClient);
+                if(status != NV_OK) {
+                    continue;
+                }
+                pRmClient = dynamicCast(pClient, RmClient);
+                os_get_current_thread(&CurrentThreadId);
+                NV_PRINTF(LEVEL_ERROR, "Current Process ID: %d\n", os_get_current_process());
+                NV_PRINTF(LEVEL_ERROR, "Current Thread ID: %lld\n", CurrentThreadId);
+                NV_PRINTF(LEVEL_ERROR, "RmClient->ProcId: %d\n", pRmClient->ProcID);
+                NV_PRINTF(LEVEL_ERROR, "RmClient->SubProcessID: %d\n", pRmClient->SubProcessID);
+                NV_PRINTF(LEVEL_ERROR, "RmClient->SubProcessName: %s\n", pRmClient->SubProcessName);
+                it = clientRefIter(pClient, NULL, classId(KernelChannelGroupApi), RS_ITERATE_DESCENDANTS, NV_TRUE);
+                while (clientRefIterNext(pClient, &it))
+                {
+                    KernelChannelGroupApi *pKernelChannelGroupApi = dynamicCast(it.pResourceRef->pResource, KernelChannelGroupApi);
+                    // KernelChannelGroup *pKernelChannelGroup = pKernelChannelGroupApi->pKernelChannelGroup;
+                    if(pKernelChannelGroupApi->threadId != threadId)
+                        continue;
+                    if(pKernelChannelGroupApi->pKernelChannelGroup->engineType != 1) {
+                        NV_PRINTF(LEVEL_ERROR, "KernelChannelGroupApi mismatch, engineType: %d, runlistId: %d\n", 
+                            pKernelChannelGroupApi->pKernelChannelGroup->engineType, 
+                            pKernelChannelGroupApi->pKernelChannelGroup->runlistId);
+                        continue;
+                    }
+                    NV_PRINTF(LEVEL_ERROR, "hClient: 0x%x, hObject: 0x%x\n", pClientHandleList[i], it.pResourceRef->hResource);
+                    pApi->hClient = pClientHandleList[i];
+                    pApi->hObject = it.pResourceRef->hResource;
+                    if(pApi->params == 0) continue;
+                    NV2080_CTRL_FIFO_DISABLE_CHANNELS_PARAMS params;
+                    params.numChannels = 0;
+                    childIt = clientRefIter(pClient, it.pResourceRef, classId(KernelChannel), RS_ITERATE_CHILDREN, NV_TRUE);
+                    while(clientRefIterNext(pClient, &childIt)) {
+                        // NV_PRINTF(LEVEL_ERROR, "KernelChannel handle = 0x%x\n", childIt.pResourceRef->hResource);
+                        params.hClientList[params.numChannels] = pClientHandleList[i];
+                        params.hChannelList[params.numChannels] = childIt.pResourceRef->hResource;
+                        params.numChannels++;
+                    }
+                    os_memcpy_to_user((void *)pApi->params, &params, sizeof(NV2080_CTRL_FIFO_DISABLE_CHANNELS_PARAMS));
+                    // NV_PRINTF(LEVEL_ERROR, "KernelChannelGroupApi handle = 0x%x\n", it.pResourceRef->hResource);
+                }
+            }
+            pApi->status = status;
             break;
         }
 
@@ -799,7 +951,16 @@ NV_STATUS RmIoctl(
                 secInfo.gpuOsInfo = priv;
             }
 
-            Nv04ControlWithSecInfo(pApi, secInfo);
+            // NV_PRINTF(LEVEL_ERROR, "Nv04Control time: %lu\n", nv_rdtsc() >> 1);
+
+            // Nv04ControlWithSecInfo(pApi, secInfo);
+            // NV_PRINTF(LEVEL_ERROR,"hClient:0x%x\n", pApi->hClient);
+            // NV_PRINTF(LEVEL_ERROR, "hObject:0x%x\n", pApi->hObject);
+            // NV_PRINTF(LEVEL_ERROR, "cmd:0x%x\n", pApi->cmd); 
+            // NV_PRINTF(LEVEL_ERROR, "paramSize:0x%x\n", pApi->paramsSize);
+            // NV_PRINTF(LEVEL_ERROR, "flags:0x%x\n", pApi->flags );
+            // NV_PRINTF(LEVEL_ERROR, "---------------------------------------------------\n");
+            Nv04Control(pApi);
 
             if ((pApi->status != NV_OK) && (priv != NULL))
             {

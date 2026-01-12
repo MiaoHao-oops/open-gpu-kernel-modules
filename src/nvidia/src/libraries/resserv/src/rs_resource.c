@@ -197,6 +197,7 @@ resControl_IMPL
     if (status == NV_WARN_NOTHING_TO_DO)
     {
         // Call handled by the prologue.
+        // NV_PRINTF(LEVEL_ERROR, "Control call 0x%x handled by prologue\n", pRsParams->cmd);
         status = NV_OK;
     }
     else

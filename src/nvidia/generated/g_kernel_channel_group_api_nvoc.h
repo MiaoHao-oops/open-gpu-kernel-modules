@@ -137,6 +137,7 @@ struct KernelChannelGroupApi {
     NvHandle hLegacykCtxShareSync;
     NvHandle hLegacykCtxShareAsync;
     NvHandle hVASpace;
+    NvU64    threadId;
 };
 
 #ifndef __NVOC_CLASS_KernelChannelGroupApi_TYPEDEF__
